@@ -14,6 +14,7 @@ contract FairAuction {
     token public tokenReward;
     mapping(address => uint256) public balanceOf;
     mapping (uint => address) accountIndex;
+    bool public finalized;
 
     /* Events */
     event TokenAllocation(address recipient, uint amount);
@@ -34,6 +35,7 @@ contract FairAuction {
         deadline = startTime + (durationInMinutes * 1 minutes);
         tokenReward = token(contractAddressOfRewardToken);
         crowdsaleCap = capOnCrowdsale * 1 ether;
+        finalized = false;
     }
 
     /* default function (called whenever funds are sent to the FairAuction) */
@@ -63,7 +65,7 @@ contract FairAuction {
         FundTransfer(msg.sender, amount);
     }
 
-    /* finalize() can be called once the FairAuction has ended and will allocate the auctioned tokens and crowdsale proceeds */
+    /* finalize() can be called once the FairAuction has ended, which will allow withdrawals */
     function finalize() {
         /* Nothing to finalize */
         if (amountRaised == 0) throw;
@@ -73,14 +75,46 @@ contract FairAuction {
             /* Don't terminate auction before cap is reached */
             if (amountRaised < crowdsaleCap) throw;
         }
-        
+
+        /* Snapshot available supply of reward tokens */
+        tokenSupply = tokenReward.balanceOf(this);
+
+        /* Mark the FairAuction as finalized */
+        finalized = true;
+        /* Fire Finalized event */
+        Finalized(beneficiary, amountRaised);
+    }
+
+    /* individualClaim() can be called by any auction participant once the FairAuction is finalized, to claim the tokens they are owed from the auction */
+    function individualClaim() {
+        /* Only allow once auction has been finalized */
+        if (!finalized) throw;
+
+        /* Grant tokens due */
+        tokenReward.transfer(msg.sender, (balanceOf[msg.sender] * tokenSupply / amountRaised));
+        /* Fire TokenAllocation event */
+        TokenAllocation(msg.sender, (balanceOf[msg.sender] * tokenSupply / amountRaised));
+        /* Prevent repeat-withdrawals */
+        balanceOf[msg.sender] = 0;
+    }
+
+    /* beneficiarySend() can be called once the FairAuction is finalized, to send the crowdsale proceeds to their destination address */
+    function beneficiarySend() {
+        /* Only allow once auction has been finalized */
+        if (!finalized) throw;
+
         /* Send proceeds to beneficiary */
         if (beneficiary.send(amountRaised)) {
             /* Fire FundClaim event */
             FundClaim(beneficiary, amountRaised);
         }
+    }
 
-        tokenSupply = tokenReward.balanceOf(this);
+    /* automaticWithdrawLoop() can be called once the FairAuction is finalized and will allocate the auctioned tokens in traditional scenarios */
+    function automaticWithdrawLoop() {
+        /* Only allow once auction has been finalized */
+        if (!finalized) throw;
+        
         /* Distribute auctioned tokens among participants fairly */
         for (uint i=0; i<memberCount; i++) {
             /* Should not occur */
@@ -90,9 +124,8 @@ contract FairAuction {
             tokenReward.transfer(accountIndex[i], (balanceOf[accountIndex[i]] * tokenSupply / amountRaised));
             /* Fire TokenAllocation event */
             TokenAllocation(accountIndex[i], (balanceOf[accountIndex[i]] * tokenSupply / amountRaised));
+            /* Prevent repeat-withdrawals */
+            balanceOf[accountIndex[i]] = 0;
         }
-
-        /* Fire Finalized event */
-        Finalized(beneficiary, amountRaised);        
     }
 }
