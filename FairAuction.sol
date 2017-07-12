@@ -110,13 +110,13 @@ contract FairAuction {
         }
     }
 
-    /* automaticWithdrawLoop() can be called once the FairAuction is finalized and will allocate the auctioned tokens in traditional scenarios */
-    function automaticWithdrawLoop() {
+    /* automaticWithdrawLoop() can be called once the FairAuction is finalized to automatically allocate a batch of auctioned tokens */
+    function automaticWithdrawLoop(uint startIndex, uint endIndex) {
         /* Only allow once auction has been finalized */
         if (!finalized) throw;
         
-        /* Distribute auctioned tokens among participants fairly */
-        for (uint i=0; i<memberCount; i++) {
+        /* Distribute auctioned tokens fairly among a batch of participants. */
+        for (uint i=startIndex; i<=endIndex && i<memberCount; i++) {
             /* Should not occur */
             if (accountIndex[i] == 0)
                 continue;
