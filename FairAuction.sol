@@ -67,6 +67,9 @@ contract FairAuction {
 
     /* finalize() can be called once the FairAuction has ended, which will allow withdrawals */
     function finalize() {
+        /* Only allow one finalization */
+        if (finalized) throw;
+
         /* Nothing to finalize */
         if (amountRaised == 0) throw;
 
